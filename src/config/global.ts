@@ -1,0 +1,1 @@
+export const GLOBAL_SEARCH_KEY = '__GLOBAL_SEARCH__'; 
