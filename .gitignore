@@ -36,8 +36,11 @@ credentials_old.json
 scripts/backups/*
 
 csv/*
+!csv/Вкусвилл/Готовая\ еда.csv
 !csv/Вкусвилл/Сыры.csv
 !csv/Озон/Торты.csv
+!csv/Озон/Супермаркет,\ готовые блюда.csv
+!csv/Озон/Супермаркет,\ молочные продукты и яйца.csv
 
 vkusvill-scraper/data/*
 ozon-scraper/data/*
