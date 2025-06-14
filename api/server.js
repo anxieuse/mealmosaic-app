@@ -8,6 +8,7 @@ import { spawn, spawnSync } from 'child_process';
 import readline from 'readline';
 import os from 'os';
 import { randomBytes } from 'crypto';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const PORT = 3001;
@@ -15,8 +16,23 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
-// Directory where CSV files are stored
-const CSV_DIR = path.resolve('./csv');
+// -----------------------------------------------------------------------------
+// Path helpers (works in ESM where __dirname is undefined)
+// -----------------------------------------------------------------------------
+
+// Emulate __filename / __dirname that exist in CommonJS
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Project-level directories (one level above /api)
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+
+// Re-usable constants for scraper locations
+const VKUSVILL_DIR = path.join(PROJECT_ROOT, 'vkusvill-scraper');
+const OZON_DIR = path.join(PROJECT_ROOT, 'ozon-scraper');
+
+// Directory where CSV files are stored – always <project_root>/csv
+const CSV_DIR = path.join(PROJECT_ROOT, 'csv');
 
 // Create the CSV directory if it doesn't exist
 if (!fs.existsSync(CSV_DIR)) {
@@ -983,11 +999,11 @@ app.post('/api/update-availability', (req, res) => {
     const shopLc = shop.toString().toLowerCase();
     if (shopLc.includes('vkusvill') || shopLc.includes('вкусвилл')) {
       // VkusVill scraper
-      scriptPath = path.resolve(__dirname, '..', 'vkusvill-scraper', 'vkusvill.py');
+      scriptPath = path.join(VKUSVILL_DIR, 'vkusvill.py');
       scriptArgs = [scriptPath, '--check-availability', tmpFile];
     } else if (shopLc.includes('ozon') || shopLc.includes('озон')) {
       // Ozon scraper
-      scriptPath = path.resolve(__dirname, '..', 'ozon-scraper', 'availability_check.py');
+      scriptPath = path.join(OZON_DIR, 'availability_check.py');
       scriptArgs = [scriptPath, tmpFile];
     } else {
       // Fallback to mock script if unknown shop
@@ -1234,13 +1250,13 @@ app.post('/api/update-availability-row', async (req, res) => {
     let scriptArgs;
     const shopLc = shop.toString().toLowerCase();
     if (shopLc.includes('vkusvill') || shopLc.includes('вкусвилл')) {
-      scriptPath = path.resolve(process.cwd(), 'vkusvill-scraper', 'vkusvill.py');
+      scriptPath = path.join(VKUSVILL_DIR, 'vkusvill.py');
       scriptArgs = [scriptPath, '--check-availability', tmpFile, '--no-logging'];
     } else if (shopLc.includes('ozon') || shopLc.includes('озон')) {
-      scriptPath = path.resolve(process.cwd(), 'ozon-scraper', 'availability_check.py');
+      scriptPath = path.join(OZON_DIR, 'availability_check.py');
       scriptArgs = [scriptPath, tmpFile];
     } else {
-      scriptPath = path.resolve(process.cwd(), 'mock_availability.py');
+      scriptPath = path.resolve(__dirname, 'mock_availability.py');
       scriptArgs = [scriptPath, tmpFile];
     }
 
