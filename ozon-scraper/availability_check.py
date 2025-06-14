@@ -253,8 +253,8 @@ def process_urls(
     """
 
     # Capture session data if none supplied
-    if cookies is None or local_storage is None or not cookies:
-        cookies, local_storage = capture_address_session()
+    # if cookies is None or local_storage is None or not cookies:
+    #     cookies, local_storage = capture_address_session()
 
     # Single-process mode ---------------------------------------------------
     if workers <= 1:

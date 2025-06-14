@@ -34,3 +34,7 @@ credentials.json
 credentials_old.json
 
 script/backups/*
+
+presentation
+csv/*
+
