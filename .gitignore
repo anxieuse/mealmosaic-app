@@ -35,15 +35,16 @@ credentials_old.json
 
 scripts/backups/*
 
-presentation
 csv/*
 !csv/Вкусвилл/Сыры.csv
 !csv/Озон/Торты.csv
-
-.cursor*
 
 vkusvill-scraper/data/*
 ozon-scraper/data/*
 ozon-scraper/draft
 vkusvill-scraper/cookies.json
 ozon-scraper/cookies.json
+
+
+
+presentation
