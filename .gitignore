@@ -37,6 +37,8 @@ scripts/backups/*
 
 presentation
 csv/*
+!csv/Вкусвилл/Сыры.csv
+!csv/Озон/Торты.csv
 
 .cursor*
 
