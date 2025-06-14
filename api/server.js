@@ -788,13 +788,34 @@ app.post('/api/google-sheets/append', async (req, res) => {
     
     console.log('Mapped row for Google Sheets:', mappedRow);
     
-    // Append the row to the specific tab
+    // Determine the first non-empty header (to handle leading blank columns)
+    const firstHeaderIndex = googleSheetsHeaders.findIndex(h => h && h.toString().trim() !== '');
+    const startIndex = firstHeaderIndex === -1 ? 0 : firstHeaderIndex;
+
+    // Helper to convert a zero-based column index to its A1 letter(s)
+    const columnIdxToLetter = (idx) => {
+      let letter = '';
+      let num = idx + 1; // 1-based for calculation
+      while (num > 0) {
+        const rem = (num - 1) % 26;
+        letter = String.fromCharCode(65 + rem) + letter;
+        num = Math.floor((num - 1) / 26);
+      }
+      return letter;
+    };
+
+    // Create the final row values trimmed of leading blanks so they align with the table start column
+    const trimmedRow = mappedRow.slice(startIndex);
+
+    // Build the range starting at the first non-empty header column (e.g. "B:B")
+    const startColumnLetter = columnIdxToLetter(startIndex);
+
     const appendResponse = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `${targetTabName}!A:A`,
+      range: `${targetTabName}!${startColumnLetter}:${startColumnLetter}`,
       valueInputOption: 'USER_ENTERED',
       resource: {
-        values: [mappedRow],
+        values: [trimmedRow],
       },
     });
     
