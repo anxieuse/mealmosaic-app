@@ -33,8 +33,15 @@ dist-ssr
 credentials.json
 credentials_old.json
 
-script/backups/*
+scripts/backups/*
 
 presentation
 csv/*
 
+.cursor*
+
+vkusvill-scraper/data/*
+ozon-scraper/data/*
+ozon-scraper/draft
+vkusvill-scraper/cookies.json
+ozon-scraper/cookies.json
