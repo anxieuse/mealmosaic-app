@@ -23,8 +23,8 @@ url="https://vkusvill.ru/goods/limony-730.html"
 url="https://vkusvill.ru/goods/ikra-seldi-proboynaya-solyenaya-okhl-90-g-105708.html"
 url="https://vkusvill.ru/goods/syr-myagkiy-s-beloy-plesenyu-bri-125-g-86091.html"
 url="https://vkusvill.ru/goods/syr-parmezan-molodoy-15807.html"
-python3 vkusvill.py --url $url
-exit 0
+# python3 vkusvill.py --url $url
+# exit 0
 
 base_url="https://vkusvill.ru/goods/"
 categories=(\

@@ -374,48 +374,6 @@ def get_product_data_single(session: requests.Session, product_url: str, enable_
                 except (json.JSONDecodeError, TypeError):
                     pass
                 break
-        
-        # Nutrition info from webNutritionInfo
-        nutrition_widget = None
-        for key, val in widgets.items():
-            if 'webNutritionInfo' in key:
-                nutrition_widget = val
-                break
-        
-        if nutrition_widget:
-            try:
-                nutrition_data = json.loads(nutrition_widget)
-                values = nutrition_data.get('values', [])
-                
-                # Initialize nutrition fields
-                result['proteins'] = ''
-                result['fats'] = ''
-                result['carbohydrates'] = ''
-                result['calories'] = ''
-
-                # True if any of pro, fats or carbs are provided
-                pfc_present = False
-                for item in values:
-                    label = item.get('label', '').lower()
-                    value = item.get('value', '')
-                    
-                    if 'белки' in label or 'protein' in label:
-                        result['proteins'] = value
-                    elif 'жиры' in label or 'fat' in label:
-                        result['fats'] = value
-                    elif 'углеводы' in label or 'carbohydrate' in label:
-                        result['carbohydrates'] = value
-                    elif 'ккал' in label or 'calorie' in label:
-                        result['calories'] = value
-                pfc_present = any(result['proteins'] or result['fats'] or result['carbohydrates'])
-                # If true, set non-provided macros ('') to 0
-                if pfc_present:
-                    result['proteins'] = '0' if not result['proteins'] else result['proteins']
-                    result['fats'] = '0' if not result['fats'] else result['fats']
-                    result['carbohydrates'] = '0' if not result['carbohydrates'] else result['carbohydrates']
-
-            except (json.JSONDecodeError, TypeError):
-                log_with_time("Error parsing nutrition info", enable_logging)
 
         # Extract category path
         layout_dict_str = data.get('layoutTrackingInfo', "{}")
@@ -477,39 +435,19 @@ def get_product_data_single(session: requests.Session, product_url: str, enable_
         # ---------------------------------------------------------------
         # Fetch extended description/characteristics (layout_page_index=2)
         # ---------------------------------------------------------------
+        data2 = None
+        widgets2 = {}
         try:
             second_path = f"{path}?layout_container=pdpPage2column&layout_page_index=2&oos_search=false&miniapp=supermarket"
             data2 = fetch_json(session, second_path, referer)
             widgets2 = data2.get('widgetStates', {})
+        except Exception as e:
+            log_with_time(f"Error fetching extended description page: {e}", enable_logging)
 
-            description_widget_raw = None
-            for key, val in widgets2.items():
-                if key.startswith('webDescription'):
-                    description_widget_raw = val
-                    break
-
-            if description_widget_raw:
-                # print(f'{description_widget_raw=}')
-                try:
-                    description_data = json.loads(description_widget_raw)
-                    characteristics = description_data.get('characteristics', [])
-                    for item in characteristics:
-                        title_lower = (item.get('title') or '').lower()
-                        content_str = (item.get('content') or '').strip()
-                        if not content_str:
-                            continue
-
-                        # Ingredients / composition
-                        if 'состав' in title_lower or 'composition' in title_lower:
-                            result['content'] = content_str
-
-                    # (description fallback via lexemes removed per recent revision)
-                except (json.JSONDecodeError, TypeError):
-                    log_with_time("Error parsing extended description widget", enable_logging)
-
-            # ----------------------------
-            # Extract weight / volume (g)
-            # ----------------------------
+        # ----------------------------
+        # Extract weight / volume (g) and quantity first
+        # ----------------------------
+        if widgets2:
             characteristics_widget_raw = None
             for key, val in widgets2.items():
                 if key.startswith('webCharacteristics'):
@@ -521,6 +459,7 @@ def get_product_data_single(session: requests.Session, product_url: str, enable_
                     char_data = json.loads(characteristics_widget_raw)
                     char_sections = char_data.get('characteristics', [])
                     weight_found = None
+                    qty_found = None
 
                     for section in char_sections:
                         short_items = section.get('short', [])
@@ -539,11 +478,8 @@ def get_product_data_single(session: requests.Session, product_url: str, enable_
                                 weight_found = _extract_value(item)
                             elif ('объем' in name_lower or 'volume' in key_lower or key_lower.startswith('volume')):
                                 weight_found = _extract_value(item)
-
-                            if weight_found:
-                                break
-                        if weight_found:
-                            break
+                            elif ('количество в упаковке' in name_lower or key_lower == 'qty') or ('количество порций' in name_lower or key_lower == 'PackagingAmount'):
+                                qty_found = _extract_value(item)
 
                     if weight_found:
                         # Normalize decimal comma to dot and keep only digits/dot
@@ -557,11 +493,131 @@ def get_product_data_single(session: requests.Session, product_url: str, enable_
                             result['weight'] = weight_clean
                         except Exception:
                             result['weight'] = weight_found  # fallback raw
+                    
+                    if qty_found:
+                        # Extract numeric value from quantity
+                        qty_clean = re.sub(r'[^0-9]', '', qty_found)
+                        if qty_clean:
+                            result['qty'] = qty_clean
 
                 except (json.JSONDecodeError, TypeError):
                     log_with_time("Error parsing characteristics widget", enable_logging)
-        except Exception as e:
-            log_with_time(f"Error fetching extended description page: {e}", enable_logging)
+
+        # ----------------------------
+        # Now extract nutrition info with weight available
+        # ----------------------------
+        nutrition_widget = None
+        for key, val in widgets.items():
+            if 'webNutritionInfo' in key:
+                nutrition_widget = val
+                break
+        
+        if nutrition_widget:
+            try:
+                nutrition_data = json.loads(nutrition_widget)
+                values = nutrition_data.get('values', [])
+                values_subtitle = nutrition_data.get('valuesSubtitle', '')
+                
+                # Initialize nutrition fields
+                result['proteins'] = ''
+                result['fats'] = ''
+                result['carbohydrates'] = ''
+                result['calories'] = ''
+
+                # Extract raw values
+                raw_proteins = ''
+                raw_fats = ''
+                raw_carbohydrates = ''
+                raw_calories = ''
+                
+                # True if any of pro, fats or carbs are provided
+                pfc_present = False
+                for item in values:
+                    label = item.get('label', '').lower()
+                    value = item.get('value', '')
+                    
+                    if 'белки' in label or 'protein' in label:
+                        raw_proteins = value
+                    elif 'жиры' in label or 'fat' in label:
+                        raw_fats = value
+                    elif 'углеводы' in label or 'carbohydrate' in label:
+                        raw_carbohydrates = value
+                    elif 'ккал' in label or 'calorie' in label:
+                        raw_calories = value
+
+                pfc_present = any([raw_proteins, raw_fats, raw_carbohydrates])
+                
+                # Check if this is per-portion data that needs adjustment
+                is_per_portion = values_subtitle == "Пищевая ценность продукта в 1 порции:"
+                weight_available = result.get('weight', '') != ''
+                
+                # Apply portion adjustment if needed
+                if is_per_portion and weight_available:
+                    try:
+                        weight_g = float(result['weight'])
+                        qty = float(result.get('qty', '1'))  # Default to 1 if no quantity found
+                        adjustment_factor = (100.0 / weight_g) * qty
+                        
+                        # Adjust all nutrition values
+                        if raw_proteins:
+                            result['proteins'] = str(float(raw_proteins) * adjustment_factor)
+                        if raw_fats:
+                            result['fats'] = str(float(raw_fats) * adjustment_factor)
+                        if raw_carbohydrates:
+                            result['carbohydrates'] = str(float(raw_carbohydrates) * adjustment_factor)
+                        if raw_calories:
+                            result['calories'] = str(float(raw_calories) * adjustment_factor)
+                            
+                        log_with_time(f"Applied portion adjustment (factor: {adjustment_factor:.3f}, weight: {weight_g}g, qty: {qty}) for {result.get('name', 'product')}", enable_logging)
+                    except (ValueError, ZeroDivisionError) as e:
+                        log_with_time(f"Error applying portion adjustment: {e}", enable_logging)
+                        # Fall back to raw values
+                        result['proteins'] = raw_proteins
+                        result['fats'] = raw_fats
+                        result['carbohydrates'] = raw_carbohydrates
+                        result['calories'] = raw_calories
+                else:
+                    # Use raw values as-is
+                    result['proteins'] = raw_proteins
+                    result['fats'] = raw_fats
+                    result['carbohydrates'] = raw_carbohydrates
+                    result['calories'] = raw_calories
+
+                # If true, set non-provided macros ('') to 0
+                if pfc_present:
+                    result['proteins'] = '0' if not result['proteins'] else result['proteins']
+                    result['fats'] = '0' if not result['fats'] else result['fats']
+                    result['carbohydrates'] = '0' if not result['carbohydrates'] else result['carbohydrates']
+
+            except (json.JSONDecodeError, TypeError):
+                log_with_time("Error parsing nutrition info", enable_logging)
+
+        # ----------------------------
+        # Extract description/composition from second page
+        # ----------------------------
+        if widgets2:
+            description_widget_raw = None
+            for key, val in widgets2.items():
+                if key.startswith('webDescription'):
+                    description_widget_raw = val
+                    break
+
+            if description_widget_raw:
+                try:
+                    description_data = json.loads(description_widget_raw)
+                    characteristics = description_data.get('characteristics', [])
+                    for item in characteristics:
+                        title_lower = (item.get('title') or '').lower()
+                        content_str = (item.get('content') or '').strip()
+                        if not content_str:
+                            continue
+
+                        # Ingredients / composition
+                        if 'состав' in title_lower or 'composition' in title_lower:
+                            result['content'] = content_str
+
+                except (json.JSONDecodeError, TypeError):
+                    log_with_time("Error parsing extended description widget", enable_logging)
 
         # Initialize other fields
         # Calculate pro/cal factor
@@ -579,6 +635,8 @@ def get_product_data_single(session: requests.Session, product_url: str, enable_
             result['pri/we'] = str(price_per_100g)
         except (ValueError, ZeroDivisionError):
             result['pri/we'] = '0'
+
+        # If "Спортивное питание" in category
 
         result['html_path'] = ''
         result['last_upd_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
