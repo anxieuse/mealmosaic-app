@@ -678,8 +678,8 @@ app.post('/api/google-sheets/append', async (req, res) => {
     if (!existingSheets.includes(targetTabName)) {
       console.log(`Tab "${targetTabName}" doesn't exist, creating it...`);
       
-      // Create the new tab
-      await sheets.spreadsheets.batchUpdate({
+      // Create the new tab and capture its sheetId so we can freeze the header row
+      const addSheetResponse = await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         resource: {
           requests: [
@@ -693,6 +693,36 @@ app.post('/api/google-sheets/append', async (req, res) => {
           ],
         },
       });
+      
+      // Extract the sheetId of the newly created tab (if available)
+      const newSheetId = addSheetResponse?.data?.replies?.[0]?.addSheet?.properties?.sheetId;
+      
+      // Freeze the header row (first row) if we successfully obtained the sheetId
+      if (newSheetId !== undefined) {
+        try {
+          await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            resource: {
+              requests: [
+                {
+                  updateSheetProperties: {
+                    properties: {
+                      sheetId: newSheetId,
+                      gridProperties: {
+                        frozenRowCount: 1,
+                      },
+                    },
+                    fields: 'gridProperties.frozenRowCount',
+                  },
+                },
+              ],
+            },
+          });
+          console.log(`Frozen first row in newly created tab "${targetTabName}" (sheetId: ${newSheetId})`);
+        } catch (freezeError) {
+          console.warn('Unable to freeze header row in newly created tab:', freezeError.message);
+        }
+      }
       
       // Add default headers to the new tab
       const defaultHeaders = [
