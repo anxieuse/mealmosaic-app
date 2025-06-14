@@ -647,6 +647,22 @@ app.get('/api/google-sheets/headers', async (req, res) => {
   }
 });
 
+// Helper to extract header row number for a given sheet/tab
+const getHeaderRowNum = async (sheetsApi, spreadsheetId, tab) => {
+  const ssMeta = await sheetsApi.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets.properties', 
+  });
+
+  const sheetMeta = ssMeta.data.sheets.find(s => s.properties.title === tab) || ssMeta.data.sheets[0];
+
+  // This part of your code was already correct!
+  const frozen = sheetMeta?.properties?.gridProperties?.frozenRowCount || 0;
+
+  // Header row is the *last* frozen row, or row 1 if nothing frozen
+  return frozen > 0 ? frozen : 1;
+};
+
 // Append row to Google Sheets
 app.post('/api/google-sheets/append', async (req, res) => {
   try {
@@ -724,6 +740,9 @@ app.post('/api/google-sheets/append', async (req, res) => {
         }
       }
       
+      // Get the header row number for the new tab (should be 1 since it's new, but let's be consistent)
+      const newTabHeaderRowNum = await getHeaderRowNum(sheets, spreadsheetId, targetTabName);
+      
       // Add default headers to the new tab
       const defaultHeaders = [
         'url', 'name', 'pri/we', 'pro/cal', 'weight', 'price', 'calories', 
@@ -733,7 +752,7 @@ app.post('/api/google-sheets/append', async (req, res) => {
       
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `${targetTabName}!1:1`,
+        range: `${targetTabName}!${newTabHeaderRowNum}:${newTabHeaderRowNum}`,
         valueInputOption: 'USER_ENTERED',
         resource: {
           values: [defaultHeaders],
@@ -743,10 +762,13 @@ app.post('/api/google-sheets/append', async (req, res) => {
       console.log(`Tab "${targetTabName}" created with headers`);
     }
     
-    // Get headers from the target tab
+    // Get the header row number (last frozen row, or row 1 if nothing frozen)
+    const headerRowNum = await getHeaderRowNum(sheets, spreadsheetId, targetTabName);
+    
+    // Get headers from the target tab using the dynamic header row
     const headersResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${targetTabName}!1:1`,
+      range: `${targetTabName}!${headerRowNum}:${headerRowNum}`,
     });
     
     const googleSheetsHeaders = headersResponse.data.values ? headersResponse.data.values[0] : [];
