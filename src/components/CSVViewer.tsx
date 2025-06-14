@@ -26,6 +26,7 @@ const NUMERIC_COLUMNS = [
   'fats',
   'carbohydrates',
   'average_rating',
+  'availability',
   'rating_count'
 ];
 
