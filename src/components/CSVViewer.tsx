@@ -229,25 +229,35 @@ export const CSVViewer: React.FC = () => {
     if (!data.length || !headers.length) return;
 
     const buildTree = (): { tree: CategoryNode[]; allPaths: string[] } => {
+      // Root object that will be converted into a tree structure
       const root: Record<string, any> = {};
-      const allPaths: string[] = [];
+      // Use a Set to avoid duplicate paths (important when accumulating ancestor paths)
+      const pathSet: Set<string> = new Set();
 
       data.forEach(row => {
-        const rawValue = row[CATEGORY_COLUMN] ?? '';
-        if (!rawValue) return;
+        // Replace empty or undefined category with a fake placeholder
+        let rawValue: string = row[CATEGORY_COLUMN] ?? '';
+        if (!rawValue) {
+          rawValue = 'Пустая категория';
+        }
 
-        const path = String(rawValue).split('#').map(p => p.trim()).join('#');
-        allPaths.push(path);
+        // Split path into parts, trimming spaces around each fragment
+        const parts = String(rawValue).split('#').map(p => p.trim());
 
+        // Walk through the parts, adding every prefix (ancestor path) into the set
         let current = root;
-        path.split('#').forEach((part, index, arr) => {
+        parts.forEach((part, index) => {
+          const pathPrefix = parts.slice(0, index + 1).join('#');
+          pathSet.add(pathPrefix);
+
           if (!current[part]) {
             current[part] = {
-              name: part,
-              path: arr.slice(0, index + 1).join('#'),
+              name: part || 'Пустая категория',
+              path: pathPrefix,
               children: {}
             };
           }
+
           current = current[part].children;
         });
       });
@@ -260,7 +270,7 @@ export const CSVViewer: React.FC = () => {
         }));
       };
 
-      return { tree: convert(root), allPaths };
+      return { tree: convert(root), allPaths: Array.from(pathSet) };
     };
 
     const { tree, allPaths } = buildTree();
@@ -411,7 +421,10 @@ export const CSVViewer: React.FC = () => {
     if (headers.some(h => normalizeHeader(h) === CATEGORY_COLUMN) && selectedCategories.size > 0) {
       workingData = workingData.filter(row => {
         const rawValue = row[CATEGORY_COLUMN] ?? '';
-        const path = rawValue ? String(rawValue).split('#').map(p => p.trim()).join('#') : '';
+        // Map empty category to the same placeholder used in the tree builder
+        const path = rawValue
+          ? String(rawValue).split('#').map(p => p.trim()).join('#')
+          : 'Пустая категория';
         return selectedCategories.has(path);
       });
     }
